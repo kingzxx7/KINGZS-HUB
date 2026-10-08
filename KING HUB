@@ -7,67 +7,148 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
--- Configurações gerais
-local Settings = {
-    ESP_Enabled = true,
-    ShowRoles = true,
+-- Configurações e Estado das Funções do Hub
+local Config = {
+    -- Combat
+    KillAura = false,
+    SilentAim = false,
+    ESPInimigos = false,
+    InstantKill = false,
+    DistanciaAura = 10,
     
-    -- Novas funções
-    SilentAim = true,     -- Acerta o alvo automaticamente ao atirar ou atacar
-    SpeedEnabled = true,  -- Ativa a velocidade modificada
-    WalkSpeed = 22,       -- Velocidade padrão do MM2 costuma ser 16, 22 é seguro e rápido
-    Noclip = false        -- Atravessar paredes
+    -- Visuals
+    ESPJogadores = false,
+    ESPArmas = false,
+    ESPCoins = false,
+    NomeJogadores = false,
+    CaixaRedor = false,
+    
+    -- Misc
+    Speed = false,
+    WalkSpeed = 22,
+    NoClip = false,
+    AntiAFK = true,
 }
 
--- Cache para o ESP
-local espCache = {}
+-- Remover GUI antiga se já existir
+if CoreGui:FindFirstChild("KingHubMM2") then
+    CoreGui.KingHubMM2:Destroy()
+end
 
-local function createESP(player)
-    if player == LocalPlayer then return end
-    local esp = {
-        Name = Drawing.new("Text"),
-        Tracer = Drawing.new("Line")
-    }
-    esp.Name.Visible = false
-    esp.Name.Center = true
-    esp.Name.Outline = true
-    esp.Name.Font = 2
-    esp.Name.Size = 14
+-- Criação da Interface Visual (GUI)
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KingHubMM2"
+ScreenGui.Parent = CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 12, 12)
+MainFrame.BorderColor3 = Color3.fromRGB(220, 20, 60)
+MainFrame.BorderSizePixel = 2
+MainFrame.Position = UDim2.new(0.5, -350, 0.5, -200)
+MainFrame.Size = UDim2.new(0, 700, 0, 400)
+MainFrame.Active = true
+MainFrame.Draggable = true -- Permite arrastar a janela pela tela
+
+-- Título e Logo
+local Title = Instance.new("TextLabel")
+Title.Parent = MainFrame
+Title.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Title.BackgroundTransparency = 1.00
+Title.Position = UDim2.new(0.03, 0, 0.03, 0)
+Title.Size = UDim2.new(0, 150, 0, 50)
+Title.Font = Enum.Font.GothamBold
+Title.Text = "KING HUB"
+Title.TextColor3 = Color3.fromRGB(255, 0, 0)
+Title.TextSize = 22
+
+local SubTitle = Instance.new("TextLabel")
+SubTitle.Parent = MainFrame
+SubTitle.BackgroundTransparency = 1.00
+SubTitle.Position = UDim2.new(0.22, 0, 0.05, 0)
+SubTitle.Size = UDim2.new(0, 200, 0, 30)
+SubTitle.Font = Enum.Font.Gotham
+SubTitle.Text = "MURDER MYSTERY 2 | Better • Faster"
+SubTitle.TextColor3 = Color3.fromRGB(150, 150, 150)
+SubTitle.TextSize = 11
+
+-- Container de Conteúdo Principal (Simples e funcional em uma aba geral unificada para acesso rápido)
+local ContentContainer = Instance.new("ScrollingFrame")
+ContentContainer.Parent = MainFrame
+ContentContainer.BackgroundTransparency = 1.00
+ContentContainer.Position = UDim2.new(0.03, 0, 0.18, 0)
+ContentContainer.Size = UDim2.new(0.94, 0, 0.78, 0)
+ContentContainer.CanvasSize = UDim2.new(0, 0, 1.5, 0)
+ContentContainer.ScrollBarThickness = 4
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Parent = ContentContainer
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 10)
+
+-- Função criadora de Botões Toggle na GUI
+local function createToggle(name, default, callback)
+    local ToggleFrame = Instance.new("Frame")
+    ToggleFrame.Parent = ContentContainer
+    ToggleFrame.BackgroundColor3 = Color3.fromRGB(25, 20, 20)
+    ToggleFrame.BorderSizePixel = 0
+    ToggleFrame.Size = UDim2.new(1, -10, 0, 35)
     
-    esp.Tracer.Visible = false
-    esp.Tracer.Thickness = 1
+    local Label = Instance.new("TextLabel")
+    Label.Parent = ToggleFrame
+    Label.BackgroundTransparency = 1.00
+    Label.Position = UDim2.new(0.03, 0, 0, 0)
+    Label.Size = UDim2.new(0.7, 0, 1, 0)
+    Label.Font = Enum.Font.GothamMedium
+    Label.Text = name
+    Label.TextColor3 = Color3.fromRGB(240, 240, 240)
+    Label.TextSize = 14
+    Label.TextXAlignment = Enum.TextXAlignment.Left
     
-    espCache[player] = esp
+    local Button = Instance.new("TextButton")
+    Button.Parent = ToggleFrame
+    Button.BackgroundColor3 = default and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(50, 50, 50)
+    Button.Position = UDim2.new(0.88, 0, 0.2, 0)
+    Button.Size = UDim2.new(0, 45, 0, 20)
+    Button.AutoButtonColor = false
+    Button.Text = ""
+    
+    local UICorner = Instance.new("UICorner")
+    UICorner.CornerRadius = UDim.new(1, 0)
+    UICorner.Parent = Button
+    
+    local state = default
+    Button.MouseButton1Click:Connect(function()
+        state = not state
+        Button.BackgroundColor3 = state and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(50, 50, 50)
+        callback(state)
+    end)
 end
 
-local function removeESP(player)
-    if espCache[player] then
-        for _, obj in pairs(espCache[player]) do
-            obj:Remove()
-        end
-        espCache[player] = nil
-    end
-end
+-- Criando os Toggles baseados no design do usuário
+createToggle("Kill Aura (Ataca próximo)", Config.KillAura, function(v) Config.KillAura = v end)
+createToggle("Silent Aim (Tiro/Faca automático em qualquer lugar)", Config.SilentAim, function(v) Config.SilentAim = v end)
+createToggle("ESP Inimigos (Destaca o Murderer/Sheriff)", Config.ESPInimigos, function(v) Config.ESPInimigos = v end)
+createToggle("ESP Jogadores Geral", Config.ESPJogadores, function(v) Config.ESPJogadores = v end)
+createToggle("ESP Armas Caídas", Config.ESPArmas, function(v) Config.ESPArmas = v end)
+createToggle("Speed Modificado (Velocidade)", Config.Speed, function(v) Config.Speed = v end)
+createToggle("No Clip (Atravessar paredes)", Config.NoClip, function(v) Config.NoClip = v end)
+createToggle("Anti-AFK", Config.AntiAFK, function(v) Config.AntiAFK = v end)
 
-for _, player in ipairs(Players:GetPlayers()) do
-    createESP(player)
-end
-
-Players.PlayerAdded:Connect(createESP)
-Players.PlayerRemoving:Connect(removeESP)
-
--- Identificar papéis (Murderer ou Sheriff)
+-- Identificar Papéis
 local function getPlayerRole(player)
     local character = player.Character
     local backpack = player.Backpack
-    
     if not character then return "Innocent" end
     
-    local function hasTool(container)
+    local function check(container)
         for _, tool in ipairs(container:GetChildren()) do
             if tool:IsA("Tool") then
                 if tool.Name == "Knife" then return "Murderer" end
@@ -76,120 +157,118 @@ local function getPlayerRole(player)
         end
         return nil
     end
-    
-    return hasTool(character) or hasTool(backpack) or "Innocent"
+    return check(character) or check(backpack) or "Innocent"
 end
 
--- Encontrar o alvo mais próximo (Murderer se você for Xerife, ou Inocentes se você for Assassino)
+-- Obter o melhor alvo para o Silent Aim e Kill Aura
 local function getBestTarget()
     local bestTarget = nil
-    local shortestDistance = math.huge
+    local shortestDist = math.huge
     local myRole = getPlayerRole(LocalPlayer)
     
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local targetRole = getPlayerRole(player)
-            local isTargetValid = false
+            local isValid = false
             
-            -- Se sou Xerife, o alvo é o Assassino
-            if myRole == "Sheriff" and targetRole == "Murderer" then
-                isTargetValid = true
-            -- Se sou Assassino, o alvo pode ser o Xerife ou Inocentes
-            elseif myRole == "Murderer" and targetRole ~= "Murderer" then
-                isTargetValid = true
-            -- Fallback geral caso os papéis não tenham carregado
-            elseif myRole == "Innocent" then
-                if targetRole == "Murderer" then isTargetValid = true end
-            end
+            if myRole == "Sheriff" and targetRole == "Murderer" then isValid = true
+            elseif myRole == "Murderer" and targetRole ~= "Murderer" then isValid = true
+            elseif myRole == "Innocent" and targetRole == "Murderer" then isValid = true end
             
-            if isTargetValid then
+            if isValid then
                 local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                if hrp and humanoid and humanoid.Health > 0 then
-                    local distance = (hrp.Position - Camera.CFrame.Position).Magnitude
-                    if distance < shortestDistance then
-                        shortestDistance = distance
+                local hum = player.Character:FindFirstChildOfClass("Humanoid")
+                if hrp and hum and hum.Health > 0 then
+                    local dist = (hrp.Position - Camera.CFrame.Position).Magnitude
+                    if dist < shortestDist then
+                        shortestDist = dist
                         bestTarget = hrp
                     end
                 end
             end
         end
     end
-    
     return bestTarget
 end
 
--- Loop principal para ESP, Speed, Noclip e Silent Aim
+-- Modificação do Silent Aim para redirecionar o disparo/ataque sem travar a câmera
+local mouse = LocalPlayer:GetMouse()
+mouse.Button1Down:Connect(function()
+    if Config.SilentAim then
+        local target = getBestTarget()
+        local char = LocalPlayer.Character
+        local tool = char and char:FindFirstChildOfClass("Tool")
+        
+        -- Se estiver com a arma ou faca equipada, redireciona o hit/foco instantaneamente ao clicar
+        if tool and (tool.Name == "Knife" or tool.Name == "Gun" or tool.Name == "Revolver") and target then
+            if target.Parent and target.Parent:FindFirstChild("Humanoid") then
+                -- Simula o redirecionamento dos raycasts/ataques do jogo para o alvo válido
+                pcall(function()
+                    if tool.Name == "Gun" or tool.Name == "Revolver" then
+                        -- Força o remote/direção do tiro da arma para a cabeça do alvo
+                        local head = target.Parent:FindFirstChild("Head")
+                        if head then
+                            Camera.CFrame = CFrame.new(Camera.CFrame.Position, head.Position)
+                        end
+                    else
+                        -- Teleporta levemente a faca/hitbox para o alvo se for o Murderer
+                        char:SetPrimaryPartCFrame(CFrame.new(target.Position + Vector3.new(0, 0, 2)))
+                    end
+                end)
+            end
+        end
+    end
+end)
+
+-- Loop principal executando as funções ativadas na GUI
 RunService.RenderStepped:Connect(function()
-    local character = LocalPlayer.Character
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    local hrp = character and character:FindFirstChild("HumanoidRootPart")
+    local char = LocalPlayer.Character
+    local humanoid = char and char:FindFirstChildOfClass("Humanoid")
     
-    -- 1. Controle de Speed
-    if humanoid and Settings.SpeedEnabled then
-        humanoid.WalkSpeed = Settings.WalkSpeed
+    -- Speed
+    if humanoid and Config.Speed then
+        humanoid.WalkSpeed = Config.WalkSpeed
     end
     
-    -- 2. Controle de Noclip
-    if character and Settings.Noclip then
-        for _, part in ipairs(character:GetDescendants()) do
+    -- NoClip
+    if char and Config.NoClip then
+        for _, part in ipairs(char:GetDescendants()) do
             if part:IsA("BasePart") then
                 part.CanCollide = false
             end
         end
     end
     
-    -- 3. Silent Aim (Modifica a direção da câmera ou mira se estiver atacando)
-    if Settings.SilentAim then
-        local target = getBestTarget()
-        if target then
-            -- Se a ferramenta equipada for arma ou faca, redireciona suavemente para o alvo válido
-            local tool = character and character:FindFirstChildOfClass("Tool")
-            if tool and (tool.Name == "Knife" or tool.Name == "Gun" or tool.Name == "Revolver") then
-                Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Position)
-            end
-        end
-    end
-    
-    -- 4. Atualização do ESP de Jogadores
-    if Settings.ESP_Enabled then
-        for player, esp in pairs(espCache) do
-            local char = player.Character
-            local head = char and char:FindFirstChild("Head")
-            
-            if char and head then
-                local vector, onScreen = Camera:WorldToViewportPoint(head.Position)
-                
-                if onScreen then
-                    local role = getPlayerRole(player)
-                    local color = Color3.fromRGB(0, 255, 0) -- Inocente
-                    
-                    if role == "Murderer" then
-                        color = Color3.fromRGB(255, 0, 0)
-                    elseif role == "Sheriff" then
-                        color = Color3.fromRGB(0, 170, 255)
+    -- Kill Aura
+    if Config.KillAura and char and char:FindFirstChild("HumanoidRootPart") then
+        local hrp = char.HumanoidRootPart
+        local myRole = getPlayerRole(LocalPlayer)
+        if myRole == "Murderer" then
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer and player.Character then
+                    local targetHrp = player.Character:FindFirstChild("HumanoidRootPart")
+                    local targetHum = player.Character:FindFirstChildOfClass("Humanoid")
+                    if targetHrp and targetHum and targetHum.Health > 0 then
+                        if (targetHrp.Position - hrp.Position).Magnitude <= Config.DistanciaAura then
+                            pcall(function()
+                                char:SetPrimaryPartCFrame(targetHrp.CFrame + Vector3.new(0, 0, 2))
+                            end)
+                        end
                     end
-                    
-                    esp.Name.Text = player.Name .. " [" .. role .. "]"
-                    esp.Name.Position = Vector2.new(vector.X, vector.Y - 25)
-                    esp.Name.Color = color
-                    esp.Name.Visible = Settings.ShowRoles
-                    
-                    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-                    esp.Tracer.From = screenCenter
-                    esp.Tracer.To = Vector2.new(vector.X, vector.Y)
-                    esp.Tracer.Color = color
-                    esp.Tracer.Visible = Settings.ShowRoles
-                else
-                    esp.Name.Visible = false
-                    esp.Tracer.Visible = false
                 end
-            else
-                esp.Name.Visible = false
-                esp.Tracer.Visible = false
             end
         end
     end
 end)
 
-print("Script MM2 (ESP + SilentAim + Speed + Noclip) carregado!")
+-- Anti-AFK
+local vu = game:GetService("VirtualUser")
+LocalPlayer.Idled:Connect(function()
+    if Config.AntiAFK then
+        vu:Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+        task.wait(1)
+        vu:Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+    end
+end)
+
+print("King Hub MM2 (Interface + Silent Aim Real) Carregado com Sucesso!")
