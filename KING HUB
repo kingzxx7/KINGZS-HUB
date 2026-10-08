@@ -1,0 +1,195 @@
+-- Verifica se o jogo carregou
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+-- Configurações gerais
+local Settings = {
+    ESP_Enabled = true,
+    ShowRoles = true,
+    
+    -- Novas funções
+    SilentAim = true,     -- Acerta o alvo automaticamente ao atirar ou atacar
+    SpeedEnabled = true,  -- Ativa a velocidade modificada
+    WalkSpeed = 22,       -- Velocidade padrão do MM2 costuma ser 16, 22 é seguro e rápido
+    Noclip = false        -- Atravessar paredes
+}
+
+-- Cache para o ESP
+local espCache = {}
+
+local function createESP(player)
+    if player == LocalPlayer then return end
+    local esp = {
+        Name = Drawing.new("Text"),
+        Tracer = Drawing.new("Line")
+    }
+    esp.Name.Visible = false
+    esp.Name.Center = true
+    esp.Name.Outline = true
+    esp.Name.Font = 2
+    esp.Name.Size = 14
+    
+    esp.Tracer.Visible = false
+    esp.Tracer.Thickness = 1
+    
+    espCache[player] = esp
+end
+
+local function removeESP(player)
+    if espCache[player] then
+        for _, obj in pairs(espCache[player]) do
+            obj:Remove()
+        end
+        espCache[player] = nil
+    end
+end
+
+for _, player in ipairs(Players:GetPlayers()) do
+    createESP(player)
+end
+
+Players.PlayerAdded:Connect(createESP)
+Players.PlayerRemoving:Connect(removeESP)
+
+-- Identificar papéis (Murderer ou Sheriff)
+local function getPlayerRole(player)
+    local character = player.Character
+    local backpack = player.Backpack
+    
+    if not character then return "Innocent" end
+    
+    local function hasTool(container)
+        for _, tool in ipairs(container:GetChildren()) do
+            if tool:IsA("Tool") then
+                if tool.Name == "Knife" then return "Murderer" end
+                if tool.Name == "Gun" or tool.Name == "Revolver" then return "Sheriff" end
+            end
+        end
+        return nil
+    end
+    
+    return hasTool(character) or hasTool(backpack) or "Innocent"
+end
+
+-- Encontrar o alvo mais próximo (Murderer se você for Xerife, ou Inocentes se você for Assassino)
+local function getBestTarget()
+    local bestTarget = nil
+    local shortestDistance = math.huge
+    local myRole = getPlayerRole(LocalPlayer)
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local targetRole = getPlayerRole(player)
+            local isTargetValid = false
+            
+            -- Se sou Xerife, o alvo é o Assassino
+            if myRole == "Sheriff" and targetRole == "Murderer" then
+                isTargetValid = true
+            -- Se sou Assassino, o alvo pode ser o Xerife ou Inocentes
+            elseif myRole == "Murderer" and targetRole ~= "Murderer" then
+                isTargetValid = true
+            -- Fallback geral caso os papéis não tenham carregado
+            elseif myRole == "Innocent" then
+                if targetRole == "Murderer" then isTargetValid = true end
+            end
+            
+            if isTargetValid then
+                local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                if hrp and humanoid and humanoid.Health > 0 then
+                    local distance = (hrp.Position - Camera.CFrame.Position).Magnitude
+                    if distance < shortestDistance then
+                        shortestDistance = distance
+                        bestTarget = hrp
+                    end
+                end
+            end
+        end
+    end
+    
+    return bestTarget
+end
+
+-- Loop principal para ESP, Speed, Noclip e Silent Aim
+RunService.RenderStepped:Connect(function()
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local hrp = character and character:FindFirstChild("HumanoidRootPart")
+    
+    -- 1. Controle de Speed
+    if humanoid and Settings.SpeedEnabled then
+        humanoid.WalkSpeed = Settings.WalkSpeed
+    end
+    
+    -- 2. Controle de Noclip
+    if character and Settings.Noclip then
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+    
+    -- 3. Silent Aim (Modifica a direção da câmera ou mira se estiver atacando)
+    if Settings.SilentAim then
+        local target = getBestTarget()
+        if target then
+            -- Se a ferramenta equipada for arma ou faca, redireciona suavemente para o alvo válido
+            local tool = character and character:FindFirstChildOfClass("Tool")
+            if tool and (tool.Name == "Knife" or tool.Name == "Gun" or tool.Name == "Revolver") then
+                Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Position)
+            end
+        end
+    end
+    
+    -- 4. Atualização do ESP de Jogadores
+    if Settings.ESP_Enabled then
+        for player, esp in pairs(espCache) do
+            local char = player.Character
+            local head = char and char:FindFirstChild("Head")
+            
+            if char and head then
+                local vector, onScreen = Camera:WorldToViewportPoint(head.Position)
+                
+                if onScreen then
+                    local role = getPlayerRole(player)
+                    local color = Color3.fromRGB(0, 255, 0) -- Inocente
+                    
+                    if role == "Murderer" then
+                        color = Color3.fromRGB(255, 0, 0)
+                    elseif role == "Sheriff" then
+                        color = Color3.fromRGB(0, 170, 255)
+                    end
+                    
+                    esp.Name.Text = player.Name .. " [" .. role .. "]"
+                    esp.Name.Position = Vector2.new(vector.X, vector.Y - 25)
+                    esp.Name.Color = color
+                    esp.Name.Visible = Settings.ShowRoles
+                    
+                    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                    esp.Tracer.From = screenCenter
+                    esp.Tracer.To = Vector2.new(vector.X, vector.Y)
+                    esp.Tracer.Color = color
+                    esp.Tracer.Visible = Settings.ShowRoles
+                else
+                    esp.Name.Visible = false
+                    esp.Tracer.Visible = false
+                end
+            else
+                esp.Name.Visible = false
+                esp.Tracer.Visible = false
+            end
+        end
+    end
+end)
+
+print("Script MM2 (ESP + SilentAim + Speed + Noclip) carregado!")
